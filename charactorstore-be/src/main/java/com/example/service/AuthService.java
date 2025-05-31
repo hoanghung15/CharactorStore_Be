@@ -16,12 +16,12 @@ import com.nimbusds.jwt.SignedJWT;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
-import lombok.experimental.NonFinal;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
 
 import java.text.ParseException;
 import java.util.Date;
@@ -36,18 +36,8 @@ public class AuthService {
     private final JwtService jwtService;
     private final LanguageService languageService;
     private final InvalidateRepository invalidateRepository;
-
-    @NonFinal
-    @Value("${jwt.signerKey}")
-    private String SIGNER_KEY;
-
-    @NonFinal
-    @Value("${jwt.exp-accessToken}")
-    private long ACCESS_TOKEN_DURATION;
-
-    @NonFinal
-    @Value("${jwt.exp-refreshToken}")
-    private long REFRESH_TOKEN_DURATION;
+    private final JedisPool jedisPool;
+    private final RedisService redisService;
 
     public ResponseEntity<ResponseDto<AuthResponse>> authenticate(AuthRequest authRequest) {
         try {
@@ -107,6 +97,14 @@ public class AuthService {
             invalidateRepository.save(invalidatedTokenModel);
             invalidateRepository.save(invalidatedRefreshToken);
 
+            try (Jedis jedis = jedisPool.getResource()) {
+                long ttlAccess = (expiryTime.getTime() - System.currentTimeMillis()) / 1000;
+                jedis.setex("revoke_token:" + jit, (int) ttlAccess, request.getAccessToken());
+
+                long ttlRefresh = (expiryTimeRefresh.getTime() - System.currentTimeMillis()) / 1000;
+                jedis.setex("revoke_token:" + jitRefresh, (int) ttlRefresh, request.getRefreshToken());
+            }
+
             return ResponseBuilder.okResponse(
                     languageService.getMessage("jwt.logout.successfully"),
                     StatusCodeEnum.AUTH0002
@@ -138,4 +136,5 @@ public class AuthService {
                 true
         );
     }
+
 }

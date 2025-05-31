@@ -27,6 +27,7 @@ import lombok.experimental.NonFinal;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import redis.clients.jedis.JedisPool;
 
 import java.text.ParseException;
 import java.time.Instant;
@@ -41,6 +42,7 @@ public class JwtService {
     private final InvalidateRepository invalidateRepository;
     private final UserRepository userRepository;
     private final LanguageService languageService;
+    private final RedisService redisService;
 
     @NonFinal
     @org.springframework.beans.factory.annotation.Value("${jwt.signerKey}")
@@ -108,12 +110,11 @@ public class JwtService {
             throw new JOSEException("Invalid JWT token");
         }
 
-        boolean checkJwtLogout = invalidateRepository.existsById(signedJWT.
-                getJWTClaimsSet().getJWTID());
-
-        if (checkJwtLogout) {
-            throw new JOSEException("Expired JWT token");
+        String jti = signedJWT.getJWTClaimsSet().getJWTID();
+        if (redisService.isTokenRevoked(jti)) {
+            throw new JOSEException("Token has been revoked");
         }
+
         return signedJWT;
     }
 
@@ -122,7 +123,8 @@ public class JwtService {
             SignedJWT signedJWT = verifyToken(refreshToken);
             String userEmail = signedJWT.getJWTClaimsSet().getSubject();
 
-            UserModel userModel = userRepository.findByEmail(userEmail).orElseThrow(() -> new UserNotFoundException("Người dùng không tồn tại"));
+            UserModel userModel = userRepository.findByEmail(userEmail).orElseThrow(
+                    () -> new UserNotFoundException("Người dùng không tồn tại"));
             String newAccToken = generateAccessToken(userModel);
             String newRefreshToken = generateRefreshToken(userModel);
 

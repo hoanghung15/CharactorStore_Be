@@ -28,5 +28,5 @@ spring:
 
 jwt:
   signerKey: "bNo78aQUGPoYQ+n70bPKw0j7YKetwWSAInt7zyJr6OulSPWoKFLH3iW9PyFYoipU"
-  exp-accessToken: 20
-  exp-refreshToken: 500
+  exp-accessToken: 120
+  exp-refreshToken: 720
